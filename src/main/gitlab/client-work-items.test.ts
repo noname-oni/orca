@@ -106,7 +106,19 @@ describe('gitlab client — combined listWorkItems', () => {
 
     await listWorkItems('/repo', 'closed', 1, 20)
     const issuesCallPath = glabExecFileAsyncMock.mock.calls[0][0] as string[]
-    expect(issuesCallPath[1]).toContain('state=closed')
+    expect(issuesCallPath.at(-1)).toContain('state=closed')
+  })
+
+  it('passes search queries through to merge request and issue fetches', async () => {
+    glabApiWithHeadersMock.mockResolvedValueOnce({ body: '[]', headers: {} })
+    glabExecFileAsyncMock.mockResolvedValueOnce({ stdout: '[]' })
+
+    await listWorkItems('/repo', 'opened', 1, 20, undefined, 'ambiguous selector')
+
+    const mergeRequestCallPath = glabApiWithHeadersMock.mock.calls[0][0] as string[]
+    const issuesCallPath = glabExecFileAsyncMock.mock.calls[0][0] as string[]
+    expect(mergeRequestCallPath[0]).toContain('search=ambiguous%20selector')
+    expect(issuesCallPath.at(-1)).toContain('search=ambiguous%20selector')
   })
 
   it("omits the state param when 'all'", async () => {
@@ -115,7 +127,25 @@ describe('gitlab client — combined listWorkItems', () => {
 
     await listWorkItems('/repo', 'all', 1, 20)
     const issuesCallPath = glabExecFileAsyncMock.mock.calls[0][0] as string[]
-    expect(issuesCallPath[1]).not.toContain('state=')
+    expect(issuesCallPath.at(-1)).not.toContain('state=')
+  })
+
+  it('routes issue list fetches through the selected SSH GitLab host', async () => {
+    resolveIssueSourceMock.mockResolvedValueOnce({
+      source: { host: 'git.internal', path: 'g/p' },
+      fellBack: false
+    })
+    glabApiWithHeadersMock.mockResolvedValueOnce({ body: '[]', headers: {} })
+    glabExecFileAsyncMock.mockResolvedValueOnce({ stdout: '[]' })
+
+    await listWorkItems('/repo', 'opened', 1, 20, 'upstream', undefined, 'conn-1')
+
+    expect(glabExecFileAsyncMock.mock.calls[0][0]).toEqual([
+      'api',
+      '--hostname',
+      'git.internal',
+      'projects/g%2Fp/issues?per_page=20&order_by=updated_at&sort=desc&state=opened'
+    ])
   })
 
   it('returns a not_found error envelope when project ref is unresolved', async () => {

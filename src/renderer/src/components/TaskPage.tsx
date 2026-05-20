@@ -2315,9 +2315,9 @@ export default function TaskPage(): React.JSX.Element {
     if (taskSource !== 'gitlab') {
       return
     }
-    // Why: GitLab queries don't work over SSH-relay (yet) and folder-
-    // mode repos have no remotes to derive a project from. Filter both.
-    const eligibleRepos = selectedRepos.filter((r) => !r.connectionId)
+    // Why: folder-mode repos have no remotes to derive a GitLab project from;
+    // SSH-backed Git repos go through the same provider-aware IPC path.
+    const eligibleRepos = selectedRepos
     if (eligibleRepos.length === 0) {
       setGitlabItems([])
       setGitlabLoading(false)
@@ -4522,7 +4522,7 @@ export default function TaskPage(): React.JSX.Element {
                             <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
                               <DropdownMenuItem onSelect={() => window.api.shell.openUrl(item.url)}>
                                 <ExternalLink className="size-4" />
-                                Open in browser
+                                Open in GitHub
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
@@ -4715,7 +4715,7 @@ export default function TaskPage(): React.JSX.Element {
                           e.stopPropagation()
                           void window.api.shell.openUrl(item.url)
                         }}
-                        aria-label="Open in browser"
+                        aria-label="Open in GitLab"
                         className="flex justify-end text-muted-foreground hover:text-foreground"
                       >
                         <ExternalLink className="size-3.5" />

@@ -488,7 +488,7 @@ const api = {
       mrIid: number
       sourceBranch?: string
       isCrossRepository?: boolean
-    }): Promise<{ baseBranch: string } | { error: string }> =>
+    }): Promise<{ baseBranch: string; pushTarget?: unknown } | { error: string }> =>
       ipcRenderer.invoke('worktrees:resolveMrBase', args),
 
     remove: (args: { worktreeId: string; force?: boolean; skipArchive?: boolean }): Promise<void> =>

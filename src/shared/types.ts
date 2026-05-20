@@ -1,7 +1,7 @@
 /* eslint-disable max-lines */
 import type { SshRemotePtyLease, SshTarget } from './ssh-types'
 import type { Automation, AutomationRun } from './automations-types'
-import type { WorkspaceSource } from './telemetry-events'
+import type { WorkspaceSource } from './workspace-source'
 import type { GitHubProjectSettings } from './github-project-types'
 import type {
   AgentStatusState,
@@ -17,7 +17,7 @@ import type { GitBranchChangeStatus } from './git-status-types'
 
 // Re-exported for backward compat with renderer call sites that import
 // `WorkspaceCreateTelemetrySource` from '../../../shared/types'.
-export type { WorkspaceSource as WorkspaceCreateTelemetrySource } from './telemetry-events'
+export type { WorkspaceSource as WorkspaceCreateTelemetrySource } from './workspace-source'
 export type { TaskProvider } from './task-providers'
 export type {
   GitBranchChangeStatus,
@@ -1242,6 +1242,8 @@ export type CreateWorktreeArgs = {
   linkedIssue?: number
   linkedPR?: number
   linkedLinearIssue?: string
+  linkedGitLabIssue?: number
+  linkedGitLabMR?: number
   pushTarget?: GitPushTarget
   workspaceStatus?: WorkspaceStatus
   /** Agent selected in the create surface. Omitted for blank-shell creates. */
@@ -1950,6 +1952,7 @@ export type TaskResumeState = {
   githubMode?: 'items' | 'project'
   githubItemsPreset?: TaskViewPresetId | null
   githubItemsQuery?: string
+  githubProjectHiddenFieldIdsByView?: Record<string, string[]>
   linearPreset?: 'assigned' | 'created' | 'all' | 'completed'
   linearQuery?: string
 }

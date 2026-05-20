@@ -102,6 +102,15 @@ const UpdatePrTitle = RepoSelector.extend({
   prRepo: SlugRepo.nullable().optional()
 })
 
+const UpdatePr = RepoSelector.extend({
+  prNumber: z.number().int().positive(),
+  updates: z.object({
+    title: OptionalString,
+    body: z.string().optional()
+  }),
+  prRepo: SlugRepo.nullable().optional()
+})
+
 const MergePr = RepoSelector.extend({
   prNumber: z.number().int().positive(),
   method: z.enum(['merge', 'squash', 'rebase']).optional(),
@@ -391,6 +400,17 @@ export const GITHUB_METHODS: RpcMethod[] = [
     params: UpdatePrTitle,
     handler: async (params, { runtime }) =>
       runtime.updateRepoPRTitle(params.repo, params.prNumber, params.title, params.prRepo ?? null)
+  }),
+  defineMethod({
+    name: 'github.updatePR',
+    params: UpdatePr,
+    handler: async (params, { runtime }) =>
+      runtime.updateRepoPRDetails(
+        params.repo,
+        params.prNumber,
+        params.updates,
+        params.prRepo ?? null
+      )
   }),
   defineMethod({
     name: 'github.mergePR',

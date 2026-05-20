@@ -184,7 +184,7 @@ export type IGitProvider = {
     repoPath: string,
     branchName: string,
     targetDir: string,
-    options?: { base?: string }
+    options?: { base?: string; noCheckout?: boolean }
   ): Promise<void>
   removeWorktree(worktreePath: string, force?: boolean): Promise<void>
   isGitRepo(path: string): boolean

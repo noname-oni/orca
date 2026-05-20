@@ -41,6 +41,8 @@ const WorktreeCreate = z
     linkedIssue: TriStateLinkedIssue,
     linkedPR: TriStateLinkedIssue,
     linkedLinearIssue: z.string().optional(),
+    linkedGitLabIssue: z.number().int().positive().optional(),
+    linkedGitLabMR: z.number().int().positive().optional(),
     comment: OptionalString,
     displayName: OptionalString,
     workspaceStatus: OptionalString,
@@ -81,6 +83,9 @@ const WorktreeCreate = z
     // Why: mobile clients pass a startup command (e.g. 'claude') so the first
     // terminal pane launches the selected agent instead of an idle shell.
     startupCommand: OptionalString,
+    // Why: task-driven mobile creates need desktop parity: the host chooses
+    // the same default/detected agent and drafts the linked issue/PR URL into it.
+    startupDraft: OptionalString,
     createdWithAgent: z
       .unknown()
       .transform((value) => (isTuiAgent(value) ? value : undefined))
@@ -103,6 +108,8 @@ const WorktreeSet = WorktreeSelector.extend({
   linkedIssue: TriStateLinkedIssue,
   linkedPR: TriStateLinkedIssue,
   linkedLinearIssue: z.union([z.string(), z.null()]).optional(),
+  linkedGitLabIssue: z.union([z.number().int().positive(), z.null()]).optional(),
+  linkedGitLabMR: z.union([z.number().int().positive(), z.null()]).optional(),
   isArchived: OptionalBoolean,
   isUnread: OptionalBoolean,
   isPinned: OptionalBoolean,
@@ -151,6 +158,19 @@ const WorktreeResolvePrBase = z.object({
   isCrossRepository: OptionalBoolean
 })
 
+const WorktreeResolveMrBase = z.object({
+  repo: z
+    .unknown()
+    .transform((v) => (typeof v === 'string' ? v : ''))
+    .pipe(z.string().min(1, 'Missing repo selector')),
+  mrIid: z
+    .unknown()
+    .transform((v) => (typeof v === 'number' && Number.isFinite(v) ? v : 0))
+    .pipe(z.number().int().positive('Missing MR number')),
+  sourceBranch: OptionalString,
+  isCrossRepository: OptionalBoolean
+})
+
 export const WORKTREE_METHODS: RpcMethod[] = [
   defineMethod({
     name: 'worktree.ps',
@@ -196,6 +216,8 @@ export const WORKTREE_METHODS: RpcMethod[] = [
         linkedIssue: params.linkedIssue,
         linkedPR: params.linkedPR,
         linkedLinearIssue: params.linkedLinearIssue,
+        linkedGitLabIssue: params.linkedGitLabIssue,
+        linkedGitLabMR: params.linkedGitLabMR,
         comment: params.comment,
         displayName: params.displayName,
         workspaceStatus: params.workspaceStatus,
@@ -206,6 +228,7 @@ export const WORKTREE_METHODS: RpcMethod[] = [
         setupDecision: params.setupDecision,
         createdWithAgent: params.createdWithAgent,
         startup: params.startupCommand ? { command: params.startupCommand } : undefined,
+        startupDraft: params.startupDraft,
         lineage: {
           parentWorktree: params.parentWorktree,
           ...(params.cwdParentWorktree ? { cwdParentWorktree: params.cwdParentWorktree } : {}),
@@ -224,6 +247,8 @@ export const WORKTREE_METHODS: RpcMethod[] = [
         linkedIssue: params.linkedIssue,
         linkedPR: params.linkedPR,
         linkedLinearIssue: params.linkedLinearIssue,
+        linkedGitLabIssue: params.linkedGitLabIssue,
+        linkedGitLabMR: params.linkedGitLabMR,
         comment: params.comment,
         isArchived: params.isArchived,
         isUnread: params.isUnread,
@@ -259,9 +284,20 @@ export const WORKTREE_METHODS: RpcMethod[] = [
     params: WorktreeResolvePrBase,
     handler: async (params, { runtime }) =>
       runtime.resolveManagedPrBase({
-        repoId: params.repo,
+        repoSelector: params.repo,
         prNumber: params.prNumber,
         headRefName: params.headRefName,
+        isCrossRepository: params.isCrossRepository
+      })
+  }),
+  defineMethod({
+    name: 'worktree.resolveMrBase',
+    params: WorktreeResolveMrBase,
+    handler: async (params, { runtime }) =>
+      runtime.resolveManagedMrBase({
+        repoSelector: params.repo,
+        mrIid: params.mrIid,
+        sourceBranch: params.sourceBranch,
         isCrossRepository: params.isCrossRepository
       })
   }),

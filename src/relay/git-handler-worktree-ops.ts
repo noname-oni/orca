@@ -14,6 +14,7 @@ export async function addWorktreeOp(git: GitExec, params: Record<string, unknown
   const branchName = params.branchName as string
   const targetDir = params.targetDir as string
   const base = params.base as string | undefined
+  const noCheckout = params.noCheckout === true
 
   // Why: a branchName starting with '-' would be interpreted as a git flag,
   // potentially changing the command's semantics (e.g. "--detach").
@@ -29,7 +30,11 @@ export async function addWorktreeOp(git: GitExec, params: Record<string, unknown
   // (state machine, common-dir scope, old-git fallback) in the comments
   // around src/main/git/worktree.ts addWorktree — those invariants apply
   // identically here.
-  const args = ['worktree', 'add', '--no-track', '-b', branchName, targetDir]
+  const args = ['worktree', 'add', '--no-track']
+  if (noCheckout) {
+    args.push('--no-checkout')
+  }
+  args.push('-b', branchName, targetDir)
   if (base) {
     args.push(base)
   }

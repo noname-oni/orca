@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- Why: GitLab MR action coverage shares mocked glab/project-ref setup across state, merge, and update cases. */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as GlUtils from './gl-utils'
 
@@ -33,7 +34,7 @@ vi.mock('./gl-utils', async () => {
   }
 })
 
-import { getMergeRequest, getMergeRequestForBranch, listMergeRequests } from './client'
+import { getMergeRequest, getMergeRequestForBranch, listMergeRequests, updateMR } from './client'
 
 describe('gitlab client — MR operations', () => {
   beforeEach(() => {
@@ -303,6 +304,54 @@ describe('gitlab client — MR operations', () => {
       const result = await listMergeRequests('/repo', 'opened')
       expect(result.error?.type).toBe('permission_denied')
       expect(result.items).toEqual([])
+    })
+  })
+
+  describe('updateMR', () => {
+    beforeEach(() => {
+      resolveIssueSourceMock.mockImplementation(async () => ({
+        source: { host: 'git.internal', path: 'g/p' },
+        fellBack: false
+      }))
+    })
+
+    it('updates title, body, and labels through the selected SSH GitLab host', async () => {
+      glabExecFileAsyncMock.mockResolvedValueOnce({ stdout: '{}' })
+
+      await expect(
+        updateMR(
+          '/repo',
+          12,
+          {
+            title: 'Renamed',
+            body: 'Updated body',
+            addLabels: ['bug'],
+            removeLabels: ['stale']
+          },
+          'upstream',
+          'conn-1'
+        )
+      ).resolves.toEqual({ ok: true })
+
+      expect(glabExecFileAsyncMock).toHaveBeenCalledWith(
+        [
+          'api',
+          '--hostname',
+          'git.internal',
+          '-X',
+          'PUT',
+          'projects/g%2Fp/merge_requests/12',
+          '-f',
+          'title=Renamed',
+          '-f',
+          'description=Updated body',
+          '-f',
+          'add_labels=bug',
+          '-f',
+          'remove_labels=stale'
+        ],
+        {}
+      )
     })
   })
 })

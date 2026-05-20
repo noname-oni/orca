@@ -194,6 +194,8 @@ export type GitPushTarget = {
   remoteName: string
   branchName: string
   remoteUrl?: string
+  /** True when Orca added this remote while preparing a fork-PR worktree. */
+  remoteCreated?: boolean
 }
 
 // ─── Worktree metadata (persisted user-authored fields only) ─────────

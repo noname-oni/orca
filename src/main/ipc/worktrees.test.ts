@@ -621,11 +621,69 @@ describe('registerWorktreeHandlers', () => {
     expect(store.setWorktreeMeta).toHaveBeenCalledWith(
       'repo-1::/workspace/improve-dashboard',
       expect.objectContaining({
-        pushTarget: {
+        pushTarget: expect.objectContaining({
           remoteName: 'pr-prateek-orca',
           branchName: 'prateek/fix-sidebar-agents-toggle',
-          remoteUrl: 'git@github.com:prateek/orca.git'
-        }
+          remoteUrl: 'git@github.com:prateek/orca.git',
+          remoteCreated: true
+        })
+      })
+    )
+  })
+
+  it('keeps the Orca-created marker when a new worktree reuses an Orca-created fork remote', async () => {
+    listWorktreesMock.mockResolvedValue([
+      {
+        path: '/workspace/improve-dashboard',
+        head: 'abc123',
+        branch: 'refs/heads/improve-dashboard',
+        isBare: false,
+        isMainWorktree: false
+      }
+    ])
+    const existingPushTarget = {
+      remoteName: 'pr-contributor-orca',
+      branchName: 'contributor/previous-fix',
+      remoteUrl: 'https://github.com/contributor/orca.git',
+      remoteCreated: true
+    }
+    store.getAllWorktreeMeta.mockReturnValue({
+      'repo-1::/workspace/previous-fix': makeWorktreeMeta({ pushTarget: existingPushTarget })
+    })
+    store.setWorktreeMeta.mockImplementation((_worktreeId, meta) => meta)
+    gitExecFileAsyncMock.mockImplementation(async (args: string[]) => {
+      if (args[0] === 'remote' && args.length === 1) {
+        return { stdout: 'pr-contributor-orca\n', stderr: '' }
+      }
+      if (args[0] === 'remote' && args[1] === 'get-url') {
+        return { stdout: 'https://github.com/contributor/orca.git\n', stderr: '' }
+      }
+      return { stdout: '', stderr: '' }
+    })
+
+    await handlers['worktrees:create'](null, {
+      repoId: 'repo-1',
+      name: 'improve-dashboard',
+      pushTarget: {
+        remoteName: 'pr-contributor-orca',
+        branchName: 'contributor/new-fix',
+        remoteUrl: 'https://github.com/contributor/orca.git'
+      }
+    })
+
+    expect(gitExecFileAsyncMock).not.toHaveBeenCalledWith(
+      ['remote', 'add', expect.any(String), expect.any(String)],
+      expect.any(Object)
+    )
+    expect(store.setWorktreeMeta).toHaveBeenCalledWith(
+      'repo-1::/workspace/improve-dashboard',
+      expect.objectContaining({
+        pushTarget: expect.objectContaining({
+          remoteName: 'pr-contributor-orca',
+          branchName: 'contributor/new-fix',
+          remoteUrl: 'https://github.com/contributor/orca.git',
+          remoteCreated: true
+        })
       })
     )
   })
@@ -2033,6 +2091,106 @@ describe('registerWorktreeHandlers', () => {
       '/workspace/feature-wt',
       false
     )
+  })
+
+  it('removes an unused Orca-created fork remote after deleting its worktree', async () => {
+    mockKnownFeatureWorktree()
+    removeWorktreeMock.mockResolvedValue(undefined)
+    const pushTarget = {
+      remoteName: 'pr-contributor-orca',
+      branchName: 'feature/from-fork',
+      remoteUrl: 'https://github.com/contributor/orca.git',
+      remoteCreated: true
+    }
+    store.getWorktreeMeta.mockReturnValue(makeWorktreeMeta({ pushTarget }))
+    store.getAllWorktreeMeta.mockReturnValue({
+      'repo-1::/workspace/feature-wt': makeWorktreeMeta({ pushTarget })
+    })
+    gitExecFileAsyncMock.mockImplementation(async (args: string[]) => {
+      if (args[0] === 'config') {
+        throw new Error('no branch config')
+      }
+      if (args[0] === 'remote' && args[1] === 'get-url') {
+        return { stdout: 'https://github.com/contributor/orca.git\n', stderr: '' }
+      }
+      return { stdout: '', stderr: '' }
+    })
+
+    await handlers['worktrees:remove'](null, {
+      worktreeId: 'repo-1::/workspace/feature-wt'
+    })
+
+    expect(gitExecFileAsyncMock).toHaveBeenCalledWith(['remote', 'remove', 'pr-contributor-orca'], {
+      cwd: '/workspace/repo'
+    })
+  })
+
+  it('keeps an Orca-created fork remote while another worktree still uses it', async () => {
+    mockKnownFeatureWorktree()
+    removeWorktreeMock.mockResolvedValue(undefined)
+    const pushTarget = {
+      remoteName: 'pr-contributor-orca',
+      branchName: 'feature/from-fork',
+      remoteUrl: 'https://github.com/contributor/orca.git',
+      remoteCreated: true
+    }
+    store.getWorktreeMeta.mockReturnValue(makeWorktreeMeta({ pushTarget }))
+    store.getAllWorktreeMeta.mockReturnValue({
+      'repo-1::/workspace/feature-wt': makeWorktreeMeta({ pushTarget }),
+      'repo-1::/workspace/other-wt': makeWorktreeMeta({
+        pushTarget: {
+          ...pushTarget,
+          branchName: 'other-branch'
+        }
+      })
+    })
+
+    await handlers['worktrees:remove'](null, {
+      worktreeId: 'repo-1::/workspace/feature-wt'
+    })
+
+    expect(gitExecFileAsyncMock).not.toHaveBeenCalledWith(
+      ['remote', 'remove', 'pr-contributor-orca'],
+      expect.any(Object)
+    )
+  })
+
+  it('ignores matching push targets from other repos when deciding fork remote cleanup', async () => {
+    mockKnownFeatureWorktree()
+    removeWorktreeMock.mockResolvedValue(undefined)
+    const pushTarget = {
+      remoteName: 'pr-contributor-orca',
+      branchName: 'feature/from-fork',
+      remoteUrl: 'https://github.com/contributor/orca.git',
+      remoteCreated: true
+    }
+    store.getWorktreeMeta.mockReturnValue(makeWorktreeMeta({ pushTarget }))
+    store.getAllWorktreeMeta.mockReturnValue({
+      'repo-1::/workspace/feature-wt': makeWorktreeMeta({ pushTarget }),
+      'repo-2::/workspace/other-wt': makeWorktreeMeta({
+        pushTarget: {
+          ...pushTarget,
+          branchName: 'other-branch'
+        }
+      })
+    })
+    gitExecFileAsyncMock.mockImplementation(async (args: string[]) => {
+      if (args[0] === 'config') {
+        throw new Error('no branch config')
+      }
+      if (args[0] === 'remote' && args[1] === 'get-url') {
+        return { stdout: 'https://github.com/contributor/orca.git\n', stderr: '' }
+      }
+      return { stdout: '', stderr: '' }
+    })
+
+    await handlers['worktrees:remove'](null, {
+      worktreeId: 'repo-1::/workspace/feature-wt'
+    })
+
+    expect(gitExecFileAsyncMock).toHaveBeenCalledWith(['remote', 'remove', 'pr-contributor-orca'], {
+      cwd: '/workspace/repo'
+    })
   })
 
   it('rejects unregistered delete paths before teardown, hooks, or git removal', async () => {

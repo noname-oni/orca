@@ -6,6 +6,7 @@
  */
 import * as path from 'path'
 import type { GitExec } from './git-handler-ops'
+import { parseWorktreeList } from './git-handler-utils'
 
 // ─── Worktree management ─────────────────────────────────────────────
 
@@ -83,6 +84,12 @@ export async function removeWorktreeOp(
     // fall through with worktreePath as repo
   }
 
+  const worktreesBeforeRemoval = await listRelayWorktrees(git, repoPath)
+  const removedWorktree = worktreesBeforeRemoval.find((worktree) =>
+    areRelayWorktreePathsEqual(worktree.path, worktreePath)
+  )
+  const branchName = normalizeLocalBranchRef(removedWorktree?.branch ?? '')
+
   const args = ['worktree', 'remove']
   if (force) {
     args.push('--force')
@@ -90,6 +97,59 @@ export async function removeWorktreeOp(
   args.push(worktreePath)
   await git(args, repoPath)
   await git(['worktree', 'prune'], repoPath)
+
+  if (!branchName) {
+    return
+  }
+
+  // Why: SSH worktree deletion should mirror local deletion. Dropping the
+  // branch also removes its upstream config, which lets fork-remotes cleanup
+  // after the last PR review worktree is gone.
+  const worktreesAfterPrune = await listRelayWorktrees(git, repoPath)
+  const branchStillInUse = worktreesAfterPrune.some(
+    (worktree) => normalizeLocalBranchRef(worktree.branch ?? '') === branchName
+  )
+  if (branchStillInUse) {
+    return
+  }
+
+  try {
+    await git(['branch', '-D', branchName], repoPath)
+  } catch (error) {
+    console.warn(
+      `relay removeWorktree: failed to delete local branch "${branchName}" after removing worktree`,
+      error
+    )
+  }
+}
+
+type RelayWorktreeInfo = {
+  path: string
+  branch?: string
+}
+
+async function listRelayWorktrees(git: GitExec, repoPath: string): Promise<RelayWorktreeInfo[]> {
+  try {
+    const { stdout } = await git(['worktree', 'list', '--porcelain'], repoPath)
+    return parseWorktreeList(stdout)
+      .map((worktree) => ({
+        path: typeof worktree.path === 'string' ? worktree.path : '',
+        branch: typeof worktree.branch === 'string' ? worktree.branch : undefined
+      }))
+      .filter((worktree) => worktree.path.length > 0)
+  } catch {
+    return []
+  }
+}
+
+function normalizeLocalBranchRef(branch: string): string {
+  return branch.replace(/^refs\/heads\//, '')
+}
+
+function areRelayWorktreePathsEqual(leftPath: string, rightPath: string): boolean {
+  const left = path.normalize(path.resolve(leftPath))
+  const right = path.normalize(path.resolve(rightPath))
+  return process.platform === 'win32' ? left.toLowerCase() === right.toLowerCase() : left === right
 }
 
 // ─── Commit ──────────────────────────────────────────────────────────

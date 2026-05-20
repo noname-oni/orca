@@ -267,6 +267,8 @@ import { DEFAULT_REPO_BADGE_COLOR, getDefaultVoiceSettings } from '../../shared/
 import { listRepoWorktrees } from '../repo-worktrees'
 import { createWorktreeSymlinks } from '../ipc/worktree-symlinks'
 import {
+  cleanupUnusedWorktreePushTargetRemote,
+  cleanupUnusedWorktreePushTargetRemoteSsh,
   createRemoteWorktree,
   configureCreatedWorktreePushTarget,
   prepareWorktreePushTarget
@@ -5888,7 +5890,12 @@ export class OrcaRuntimeService {
       // Why: fork-PR worktrees created through a remote runtime need the same
       // upstream target setup as local desktop creates, or Push would publish
       // to the wrong remote after the client/server split.
-      preparedPushTarget = await prepareWorktreePushTarget(repo.path, args.pushTarget)
+      preparedPushTarget = await prepareWorktreePushTarget(
+        repo.path,
+        args.pushTarget,
+        this.store,
+        repo.id
+      )
     }
 
     await (sparseDirectories.length > 0
@@ -6717,6 +6724,13 @@ export class OrcaRuntimeService {
     if (repo.connectionId) {
       const provider = requireSshGitProvider(repo.connectionId)
       await provider.removeWorktree(worktree.path, force)
+      await cleanupUnusedWorktreePushTargetRemoteSsh(
+        provider,
+        repo.path,
+        worktree.id,
+        worktree.pushTarget,
+        this.store
+      )
       this.clearOptimisticReconcileToken(worktree.id)
       this.store.removeWorktreeMeta(worktree.id)
       this.invalidateResolvedWorktreeCache()
@@ -6793,6 +6807,12 @@ export class OrcaRuntimeService {
         // list` continues to show the stale entry and the branch it had checked out
         // remains locked — other worktrees cannot check it out.
         await gitExecFileAsync(['worktree', 'prune'], { cwd: repo.path }).catch(() => {})
+        await cleanupUnusedWorktreePushTargetRemote(
+          repo.path,
+          worktree.id,
+          worktree.pushTarget,
+          this.store
+        )
         this.clearOptimisticReconcileToken(worktree.id)
         this.store.removeWorktreeMeta(worktree.id)
         this.invalidateResolvedWorktreeCache()
@@ -6805,6 +6825,12 @@ export class OrcaRuntimeService {
       throw new Error(formatWorktreeRemovalError(error, worktree.path, force))
     }
 
+    await cleanupUnusedWorktreePushTargetRemote(
+      repo.path,
+      worktree.id,
+      worktree.pushTarget,
+      this.store
+    )
     this.clearOptimisticReconcileToken(worktree.id)
     this.store.removeWorktreeMeta(worktree.id)
     this.invalidateResolvedWorktreeCache()
